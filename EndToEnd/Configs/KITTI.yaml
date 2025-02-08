@@ -1,16 +1,16 @@
 # ROS bag Topics
-pc_topic: '/map_pointcloud'
-pose_topic: '/map_pose'
+pc_topic: '/wamv/sensors/lidars/lidar_wamv_sensor/points'
+pose_topic: '/gt_pose'
 publish: True
 
 
 num_classes: 11
 
 # Conv BKI
-grid_size: [512, 512, 32]
-min_bound: [-51.2, -51.2, -4.2]
-max_bound: [51.2, 51.2, 2.0]
-voxel_sizes: [0.2, 0.2, 0.1875]
+grid_size: [256, 256, 4]
+min_bound: [-25.6, -25.6, -1.1]
+max_bound: [25.6, 25.6, -0.7]
+voxel_sizes: [0.2, 0.2, 0.1]
 f: 5
 
 # Segmentation Net
