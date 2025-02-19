@@ -8,46 +8,37 @@ explore the code from [here](https://github.com/UMich-CURLY/NeuralBKI).
 
 In this repository and subsequent paper, we further accelerate ConvBKI and test
 on more challenging test cases with perceptually difficult scenarios including
-real-world military vehicles. An example from the real-world testing is playing below.
+marine surface environment. An example from the VRX simulation is playing below.
 
 ![Alt Text](./video.gif)
 
 ConvBKI runs as an end-to-end network which you can test using this repository! To test ConvBKI,
-clone the repository and have your pre-processed ROS2 bags ready.
+clone the repository and have your pre-processed ROS2 bags ready (or your vrx simulation if feeding the odometry/pose online).
 
-Next, simply navigate to the EndToEnd directory and run ros2_node.py. Once the 
-network is up and running as a ROS2 node, begin playing the ROS2 bag. Note that you will need
+Next, simply navigate to the EndToEnd directory and run 'ros2_node_pt_cloud.py'. Once the 
+network is up and running as a ROS2 node, begin playing the ROS2 bag (or the simulation for online feed). Note that you will need
 to open RVIZ2 if you want to visualize the results.
-We use SPVCNN as the backbone, which you can find installation instructions on [here](https://github.com/mit-han-lab/spvnas).
-As an alternative, we provide a configuration file to create a conda environment, tested on Ubuntu 22.
+We use Grounded-SAM2 for semantic segmentation, which you can find installation instructions on [here](git@github.com:IDEA-Research/Grounded-SAM-2.git).
 
-The bottleneck of the ROS2 node is the visualization, since each map contains hundreds
-of thousand of voxels. We decided not to optimize this, since the most likely use case is to
-send the semantic and variance map as a custom ROS2 message. To run without visualization,
-simply set "Publish" in the yaml file to False. If running with "Publish" as True,
-we recommend playing the data at a slower rate with the -r <rate> setting to a value such as 0.1
-so RVIZ2 can keep up with the data. 
+But we RECOMMEND following the below instructions to install Grounded-SAM2 else there maybe dependency conflicts. We also provide a configuration file to create a conda environment, tested on Ubuntu 22.
 
 For more information, please see the below sections on how we preprocessed poses,
-and more information on parameters. Unfortunately, we are unable to publish 
-the perceptually challenging data due to proprietary restrictions. However, all code
-used in the process is made public along with samples on open source data sets
-which we create in the notebook CreateBag.ipynb. 
+and more information on parameters. 
 
 ### Note
-This branch provides a ROS2 wrapper (ROS2 Humble) for ConvBKI, whereas the main branch supports ROS1. The primary intention of this work was to have ROS2 wrapper for the 3D Mapping, though we do provide resources how localization can be supported with this wrapper.
+This branch provides a ROS2 wrapper (ROS2 Humble) with open-vocabulary semantic segmentation using Grounded-SAM2, for ConvBKI. The primary intention of this work was to do 3D Mapping, though we do provide resources how localization can be supported with this wrapper (if ground_truth odometry is not available).
 
 ## Install
 
 ### Localization (for pre-processing the poses)
-You can ignore the Localization instructions if you already have the pre-processed pose data in a ROS2 bag file.
+You can ignore the Localization instructions if you already have the pre-processed pose data in a ROS2 bag file, or if you have the ground-truth odometry published online.
 
 See LIO-SAM documentation for software and hardware dependency information.
 
 - If using ROS1 (in which case you'll likely use ros1bridge to talk to ros2_node), use the following commands to download and compile the package.
 
 ```
-git clone -b ros2 https://github.com/UMich-CURLY/BKI_ROS.git
+git clone -b ros2_grounded_sam2 git@github.com:spsingh37/BKI_ROS.git
 mv ~/BKI_ROS/lio-sam/liorf ~/catkin_ws/src
 cd ~/catkin_ws
 catkin_make
@@ -56,82 +47,82 @@ catkin_make
 - If using ROS2, use the ros2 branch of- https://github.com/TixiaoShan/LIO-SAM
 
 ### Mapping
-
-- Option 1: We provide an environment.yml which you can use to create a conda environment. It has all the dependencies from the working environment. But NOT RECOMMENDED since it always caused dependency conflicts (But just for reference we're providing it)
+- Tested on Ubuntu 22.04 (with cuda 11.8.0)
 ```
-git clone -b ros2 https://github.com/UMich-CURLY/BKI_ROS.git
-cd ~/BKI_ROS/EndToEnd/backup_env_yml
-conda env create -f environment.yml
-conda activate bkiros2
-```
-
-- Option 2: RECOMMENDED (tested on Ubuntu 22.04)
-```
-git clone -b ros2 https://github.com/UMich-CURLY/BKI_ROS.git
+git clone -b ros2_grounded_sam2 git@github.com:spsingh37/BKI_ROS.git
 cd ~/BKI_ROS/EndToEnd
-conda env create -f environment.yml
-conda activate bkiros2
-conda install -c nvidia/label/cuda-11.8.0 cuda-toolkit
-conda install pytorch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 pytorch-cuda=11.8 -c pytorch -c nvidia
+conda env create -f environment.yaml
+conda activate ros2_grounded_sam2
+export CUDA_HOME=/usr/local/cuda-11.8/
 sudo apt-get install libsparsehash-dev
-pip install --upgrade git+https://github.com/mit-han-lab/torchsparse.git@v1.4.0
+cd Segmentation/
+pip install -e .
+pip install --no-build-isolation -e grounding_dino
+cd checkpoints
+bash download_ckpts.sh
+cd ..
+cd gdino_checkpoints
+bash download_ckpts.sh
+cd ../..
+git clone git@github.com:mit-han-lab/torchsparse.git
+cd torchsparse/
+git checkout v1.4.0
+python setup.py install
+export LD_PRELOAD=/usr/lib/x86_64-linux-gnu/libtiff.so.5
 ```
 
-## Mapping with ros2 bag
-
-#### Run mapping
+## Run mapping
 
 You can run the mapping module which will create a ros2 publisher that publish the map and can be visualized on rviz2.
 
-1. Run ros2_node.py:
+1. Run ros2_node_pt_cloud.py:
 ```
 cd ~/BKI_ROS/EndToEnd
-python ros2_node.py
+python ros2_node_pt_cloud.py
 ```
-2. Play processed ros2 bag:
+2. If you have odometry (not pose), run this:
+```
+python odom_to_pose.py
+```
+3. For publishing global map (needed for object localization; visualizing can be expensize in rviz if large map):
+```
+python pointcloud_publisher_global.py
+```
+4. Run object localization (with Augmented reality like object position viewer):
+```
+python cluster_global_pub_objects.py
+```
+5. 
+(a) Either play processed ros2 bag:
 ```
 ros2 bag play your-bag.db3
+```
+OR
+(b) Run VRX simulation:
+```
+ros2 launch vrx_gz competition.launch.py world:=sydney_regatta
 ```
 
 #### YAML Parameters
 
-Parameters can be set in the yaml config file, and it can be found in EndtoEnd/Configs
+Parameters can be set in the yaml config file, and it can be found in EndtoEnd/Configs/KITTI.yaml
 
 * pc_topic - the name of the pointcloud topic to subscribe to
 * pose_topic - the name of the pose topic to subscribe to
 * num_classes - number of semantic classes
 
+* For now, the semantic_classes, their colors, and LiDAR-camera intrinsic-extrinisics are all specified in EndtoEnd/Segmentation/utils.py
+
 * grid_size, min_bound, max_bound, voxel_sizes - parameters for convbki layer
-* f - convbki layer kernel size
+* model_path - saved weights for convbki layer
+* f - convbki layer kernel size...if you actually want to change this, pls do so in EndtoEnd/ConvBKI/ConvBKI.py...its the variable 'max_dist' there at line 12
+
+- Not using the following:
 * res, cr - parameters for SPVNAS segmentation net
 * seg_path - saved weights for SPVNAS segmentation net
-* model_path - saved weights for convbki layer
 
-#### Model Weights
 
-Weights for SPVNAS segmentation network and convbki layer are located in EndtoEnd/weights, currently the weights are trained on [Rellis3D dataset](https://github.com/unmannedlab/RELLIS-3D) for off-road driving and Semantic KITTI [1] for on-road driving. If you have other pretrained weights, you should store them here and change the seg_path and model_path in the config file accordingly. 
-  
-## Run the package (with ROS1 only)
 
-1. Run the launch file:
-```
-cd ~/catkin_ws/src/liorf/launch
-roslaunch liorf run_lio_sam_ouster.launch
-```
-
-2. Play existing bag files:
-```
-rosbag play your-bag.bag
-```
-
-3. Call the save map service to create new rosbag:
-```
-rosservice call /liorf/save_map "{}"
-```
-
-**Before creating rosbag** change line 392 in ~/catkin_ws/src/liorf/src/mapOptimization.cpp to bag.open("/your/directory/lidarPoses.bag", rosbag::bagmode::Write);
- 
-For a more detailed setup guide to LIO-SAM, please see https://github.com/TixiaoShan/LIO-SAM and https://github.com/YJZLuckyBoy/liorf
 
 ## Acknowledgement
 We utilize data and code from: 
