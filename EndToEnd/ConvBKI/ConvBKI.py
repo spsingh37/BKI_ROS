@@ -9,7 +9,7 @@ import torch.nn.functional as F
 class ConvBKI(torch.nn.Module):
     def __init__(self, grid_size, min_bound, max_bound, filter_size=3,
                  num_classes=21, prior=0.001, device="cpu", datatype=torch.float32,
-                max_dist=0.5):
+                max_dist=0.01):#1.5
         '''
         Input:
             grid_size: (x, y, z) int32 array, number of voxels
@@ -131,6 +131,11 @@ class ConvBKI(torch.nn.Module):
             unique_inds, counts = torch.unique(grid_pc.to(torch.long), return_counts=True, dim=0)
             counts = counts.type(torch.long)
             grid_indices = [unique_inds[:, i] for i in range(grid_pc.shape[1])]
+            print("update.shape:", update.shape)
+            print("len(grid_indices):", len(grid_indices))
+            print("grid_indices[0].shape:", grid_indices[0].shape)
+            print("grid_indices[1].shape:", grid_indices[1].shape)
+            print("counts.shape:", counts.shape)
             update[grid_indices] = update[grid_indices] + counts
         return update
 
@@ -147,6 +152,7 @@ class ConvBKI(torch.nn.Module):
         update = torch.zeros_like(current_map)
 
         N, C = point_cloud.shape
+        print("N, C: ", N, C)
         continuous = False
         if C == self.num_classes + 3:
             continuous = True

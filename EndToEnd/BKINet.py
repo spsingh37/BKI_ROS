@@ -65,20 +65,24 @@ class BKINet(torch.nn.Module):
         Input:
         List of input for [propagation, segmentation]
         '''
-        new_pose, lidar, seg_input, inv_map = input_data
+        new_pose, lidar, point_labels, _ = input_data
 
         # Propagate
         self.ego_to_map, self.grid = self.propagation_net(new_pose, self.grid)
         transformed_lidar = torch.matmul(self.ego_to_map[:3, :3], lidar[:, :3].T).T + self.ego_to_map[:3, 3]
-
+        print("transformed_lidar.shape: ", transformed_lidar.shape)
         # Update
-        point_labels = F.softmax(self.segmentation_net(seg_input)[inv_map])
+        # point_labels = point_labels#F.softmax(self.segmentation_net(seg_input)[inv_map])
+        point_labels = torch.tensor(point_labels, dtype=torch.float32, device=self.device)  # Convert NumPy array to tensor
 
-        if self.remap:
-            point_labels = remap_seg(point_labels)
-            dists = torch.linalg.norm(lidar, axis=1)
-            transformed_lidar = transformed_lidar[dists > 3.0, :]
-            point_labels = point_labels[dists > 3.0, :]
+        # if self.remap:
+        #     point_labels = remap_seg(point_labels)
+        #     dists = torch.linalg.norm(lidar, axis=1)
+        #     transformed_lidar = transformed_lidar[dists > 3.0, :]
+        #     point_labels = point_labels[dists > 3.0, :]
+        #     print("point_labels.shape: ", point_labels.shape)
+        print("point_labels.shape: ", point_labels.shape)
 
         segmented_points = torch.concat((transformed_lidar[:, :3], point_labels), dim=1)
+        print("segmented_points.shape: ", segmented_points.shape)
         self.grid = self.convbki_net(self.grid, segmented_points)
